@@ -1,0 +1,29 @@
+# GKE Cluster Configuration
+apiVersion: container.cnrm.cloud.google.com/v1beta1
+kind: ContainerCluster
+metadata:
+  name: todo-app-cluster
+  namespace: config-control
+spec:
+  location: us-central1
+  initialNodeCount: 3
+  nodeConfig:
+    machineType: e2-medium
+    diskSizeGb: 100
+    oauthScopes:
+    - https://www.googleapis.com/auth/cloud-platform
+  addonsConfig:
+    horizontalPodAutoscaling:
+      disabled: false
+    httpLoadBalancing:
+      disabled: false
+---
+# Alternative gcloud command format (for reference):
+# gcloud container clusters create todo-app-cluster \
+#   --zone=us-central1-a \
+#   --num-nodes=3 \
+#   --machine-type=e2-medium \
+#   --disk-size=100GB \
+#   --enable-autoscaling \
+#   --min-nodes=1 \
+#   --max-nodes=5

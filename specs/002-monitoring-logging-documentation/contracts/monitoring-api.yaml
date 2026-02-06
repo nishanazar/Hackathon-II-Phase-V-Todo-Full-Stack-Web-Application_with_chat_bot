@@ -1,0 +1,129 @@
+# API Contract: Monitoring Service
+
+## Overview
+This document specifies the API endpoints for the monitoring service that collects and provides system metrics.
+
+## Base URL
+`http://grafana-service.monitoring.svc.cluster.local`
+
+## Endpoints
+
+### Get System Metrics
+- **Endpoint**: `GET /api/metrics/system`
+- **Description**: Retrieves system-wide metrics including CPU, memory, pod count, and request rates
+- **Parameters**:
+  - `metric_type` (optional, string): Filter by specific metric type (cpu, memory, pods, requests)
+  - `start_time` (optional, datetime): Start time for metrics window
+  - `end_time` (optional, datetime): End time for metrics window
+  - `interval` (optional, string): Aggregation interval (1m, 5m, 15m, 1h)
+
+#### Request Headers
+- `Authorization: Bearer <token>` (required if authentication enabled)
+
+#### Response
+```
+{
+  "timestamp": "2026-02-04T10:00:00Z",
+  "metrics": [
+    {
+      "type": "cpu",
+      "value": 45.2,
+      "unit": "percentage",
+      "source": "kubernetes_nodes"
+    },
+    {
+      "type": "memory",
+      "value": 62.7,
+      "unit": "percentage",
+      "source": "kubernetes_nodes"
+    },
+    {
+      "type": "pods",
+      "value": 12,
+      "unit": "count",
+      "source": "kubernetes_cluster"
+    },
+    {
+      "type": "requests",
+      "value": 245,
+      "unit": "per_minute",
+      "source": "ingress_controller"
+    }
+  ]
+}
+```
+
+#### Error Responses
+- `400 Bad Request`: Invalid parameters
+- `401 Unauthorized`: Missing or invalid authorization token
+- `500 Internal Server Error`: Server-side error retrieving metrics
+
+### Get Pod-Specific Metrics
+- **Endpoint**: `GET /api/metrics/pods/{pod_name}`
+- **Description**: Retrieves metrics for a specific pod
+- **Path Parameters**:
+  - `pod_name` (required, string): Name of the pod to retrieve metrics for
+- **Query Parameters**:
+  - `start_time` (optional, datetime): Start time for metrics window
+  - `end_time` (optional, datetime): End time for metrics window
+  - `interval` (optional, string): Aggregation interval (1m, 5m, 15m, 1h)
+
+#### Response
+```
+{
+  "pod_name": "frontend-7d5b8c9c4-xl2v9",
+  "namespace": "default",
+  "metrics": [
+    {
+      "type": "cpu",
+      "values": [
+        {"timestamp": "2026-02-04T09:55:00Z", "value": 12.3},
+        {"timestamp": "2026-02-04T09:56:00Z", "value": 11.8},
+        ...
+      ],
+      "unit": "millicores"
+    },
+    {
+      "type": "memory",
+      "values": [
+        {"timestamp": "2026-02-04T09:55:00Z", "value": 128.5},
+        {"timestamp": "2026-02-04T09:56:00Z", "value": 130.2},
+        ...
+      ],
+      "unit": "MiB"
+    }
+  ]
+}
+```
+
+### Get Log Entries
+- **Endpoint**: `GET /api/logs`
+- **Description**: Retrieves log entries from the system
+- **Parameters**:
+  - `component` (optional, string): Filter by component (frontend, backend, database, dapr, kafka)
+  - `log_level` (optional, string): Filter by log level (info, warning, error, debug)
+  - `start_time` (optional, datetime): Start time for log window
+  - `end_time` (optional, datetime): End time for log window
+  - `limit` (optional, integer): Maximum number of log entries to return (default: 100)
+
+#### Response
+```
+{
+  "logs": [
+    {
+      "timestamp": "2026-02-04T09:58:23Z",
+      "level": "info",
+      "component": "backend",
+      "message": "User authentication successful",
+      "correlation_id": "abc123def456"
+    },
+    {
+      "timestamp": "2026-02-04T09:58:25Z",
+      "level": "info",
+      "component": "frontend",
+      "message": "Task list loaded for user",
+      "correlation_id": "abc123def456"
+    }
+  ]
+}
+```

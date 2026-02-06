@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Todo AI Chatbot - Advanced Task API
+  description: API for managing tasks with advanced features like due dates, priorities, tags, and recurring intervals
+  version: 1.0.0
+servers:
+  - url: https://api.todo-chatbot.com/v1
+    description: Production server
+  - url: http://localhost:8000/v1
+    description: Development server
+paths:
+  /api/{user_id}/tasks:
+    get:
+      summary: Get all tasks for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: completed
+          in: query
+          description: Filter by completion status
+          schema:
+            type: boolean
+        - name: priority
+          in: query
+          description: Filter by priority level (1-5)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: due_after
+          in: query
+          description: Filter tasks due after this date (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+        - name: due_before
+          in: query
+          description: Filter tasks due before this date (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+        - name: tags
+          in: query
+          description: Filter by tags (comma-separated)
+          schema:
+            type: string
+        - name: sort_by
+          in: query
+          description: Field to sort by (due_date, priority, created_at, title)
+          schema:
+            type: string
+            enum: [due_date, priority, created_at, title]
+        - name: sort_order
+          in: query
+          description: Sort order (asc or desc)
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  total:
+                    type: integer
+                    description: Total number of tasks matching the query
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - user does not have access to this resource
+    post:
+      summary: Create a new task
+      parameters:
+        - name: user FIXME: The file path C:\Users\USER\hackthon_2_complete_step\phase_5\specs\016-advanced-todo-features\contracts\advanced-task-api.yaml contains a character sequence that is not allowed in YAML: "user FIXME". Please remove or replace this sequence.

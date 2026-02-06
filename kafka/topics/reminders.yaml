@@ -1,0 +1,10 @@
+# Kafka Topic Configuration for Reminders
+# This configuration defines the topic for reminder-related events
+
+config:
+  num.partitions: 3
+  replication.factor: 1
+  cleanup.policy: delete
+  retention.ms: 604800000  # 7 days retention
+  segment.bytes: 1073741824  # 1GB
+  max.message.bytes: 1048576  # 1MB

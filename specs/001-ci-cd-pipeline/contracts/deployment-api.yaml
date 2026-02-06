@@ -1,0 +1,104 @@
+# Deployment API Contract
+
+## Purpose
+Defines the interface between the CI/CD pipeline and the deployment infrastructure for the Todo AI Chatbot application.
+
+## Deployment Status Endpoint
+```
+GET /api/deployment/status
+```
+
+### Description
+Returns the current status of the deployed application.
+
+### Response
+```json
+{
+  "status": "healthy|degraded|unhealthy",
+  "version": "string",
+  "timestamp": "ISO 8601 datetime",
+  "services": [
+    {
+      "name": "frontend|backend|mcp-server",
+      "status": "running|stopped|error",
+      "version": "string",
+      "replicas": {
+        "desired": 1,
+        "current": 1,
+        "ready": 1
+      }
+    }
+  ]
+}
+```
+
+## Deployment Trigger Endpoint
+```
+POST /api/deployment/trigger
+```
+
+### Description
+Triggers a new deployment with the specified version.
+
+### Request Body
+```json
+{
+  "version": "string",
+  "environment": "production|staging|development",
+  "services": [
+    {
+      "name": "frontend|backend|mcp-server",
+      "image": "string",
+      "tag": "string"
+    }
+  ],
+  "rollback_on_failure": true
+}
+```
+
+### Response
+```json
+{
+  "deployment_id": "string",
+  "status": "initiated|failed",
+  "message": "string"
+}
+```
+
+## Deployment History Endpoint
+```
+GET /api/deployment/history
+```
+
+### Description
+Returns the history of deployments.
+
+### Response
+```json
+[
+  {
+    "deployment_id": "string",
+    "version": "string",
+    "timestamp": "ISO 8601 datetime",
+    "status": "success|failed|rolled_back",
+    "triggered_by": "string",
+    "duration_seconds": 0
+  }
+]
+```
+
+## Health Check Endpoint
+```
+GET /health
+```
+
+### Description
+Simple health check to verify the deployment system is operational.
+
+### Response
+```json
+{
+  "status": "ok",
+  "timestamp": "ISO 8601 datetime"
+}
+```

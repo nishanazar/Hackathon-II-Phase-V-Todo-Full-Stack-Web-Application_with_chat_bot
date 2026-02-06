@@ -1,0 +1,44 @@
+# API Contract: AI Tools Interface with Kubernetes
+
+## Overview
+This document describes the interface between AI tools (kubectl-ai and Kagent) and the Kubernetes API for performing AI-assisted operations.
+
+## kubectl-ai Interface
+
+### Scaling Operations
+- **Command**: `kubectl ai "scale deployment <name> to <replicas>"`
+- **Description**: Scale a deployment to specified number of replicas
+- **Input**: Natural language command specifying deployment name and target replica count
+- **Output**: Confirmation of scaling operation and status
+
+### Analysis Operations
+- **Command**: `kubectl ai "analyze cluster health"`
+- **Description**: Analyze the health of the Kubernetes cluster
+- **Input**: Natural language command requesting cluster analysis
+- **Output**: Health report with status of nodes, pods, and system components
+
+### Troubleshooting Operations
+- **Command**: `kubectl ai "check for pod failures"`
+- **Description**: Check for any failing pods in the cluster
+- **Input**: Natural language command requesting pod status check
+- **Output**: List of problematic pods with error details
+
+## Kagent Interface
+
+### Cluster Analysis
+- **Command**: `kagent "analyze cluster health"`
+- **Description**: Perform comprehensive analysis of cluster health
+- **Input**: Natural language command requesting cluster analysis
+- **Output**: Detailed health report with recommendations
+
+### Resource Management
+- **Command**: `kagent "scale frontend deployment to 2 replicas"`
+- **Description**: Scale a specific deployment to target replica count
+- **Input**: Natural language command specifying deployment and target replicas
+- **Output**: Scaling confirmation and status
+
+### Diagnostic Operations
+- **Command**: `kagent "diagnose application issues"`
+- **Description**: Diagnose potential issues with deployed applications
+- **Input**: Natural language command requesting application diagnosis
+- **Output**: List of potential issues with suggested solutions

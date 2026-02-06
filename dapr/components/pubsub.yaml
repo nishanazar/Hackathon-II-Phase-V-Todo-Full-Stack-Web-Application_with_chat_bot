@@ -1,0 +1,24 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: task-pubsub
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+  - name: brokers
+    value: "REPLACE_WITH_RED_PANDA_BROKERS"  # Replace with actual brokers from Redpanda Cloud
+  - name: consumerGroup
+    value: "task-group"
+  - name: clientID
+    value: "dapr-producer-consumer"
+  - name: authRequired
+    value: "true"
+  - name: saslUsername
+    value: "REPLACE_WITH_SASL_USERNAME"  # Replace with actual SASL username
+  - name: saslPassword
+    value: "REPLACE_WITH_SASL_PASSWORD"  # Replace with actual SASL password
+  - name: maxMessageBytes
+    value: 1048576
+  - name: version
+    value: 2.1.1

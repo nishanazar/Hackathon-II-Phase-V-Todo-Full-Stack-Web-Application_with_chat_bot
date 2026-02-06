@@ -1,0 +1,268 @@
+openapi: 3.0.1
+info:
+  title: Monitoring Configuration API
+  description: API for configuring and managing monitoring settings for the Todo AI Chatbot
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+paths:
+  /monitoring/config:
+    get:
+      summary: Get current monitoring configuration
+      description: Retrieve the current monitoring settings for the application
+      responses:
+        '200':
+          description: Current monitoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+    put:
+      summary: Update monitoring configuration
+      description: Modify the current monitoring settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringConfiguration'
+      responses:
+        '200':
+          description: Successfully updated monitoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+        '400':
+          description: Invalid configuration provided
+  /monitoring/logs:
+    get:
+      summary: Get application logs
+      description: Retrieve application logs with filtering options
+      parameters:
+        - name: service
+          in: query
+          description: Service name to filter logs for
+          required: false
+          schema:
+            type: string
+        - name: level
+          in: query
+          description: Log level to filter (debug, info, warn, error)
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of log entries to return
+          required: false
+          schema:
+            type: integer
+            default: 100
+        - name: since
+          in: query
+          description: ISO 8601 timestamp to get logs since that time
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Application logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntry'
+  /monitoring/alerts:
+    get:
+      summary: Get active alerts
+      description: Retrieve currently active alerts from the monitoring system
+      responses:
+        '200':
+          description: List of active alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Alert'
+    post:
+      summary: Create a new alert rule
+      description: Define a new alert rule in the monitoring system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRule'
+      responses:
+        '201':
+          description: Alert rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid alert rule provided
+  /monitoring/metrics:
+    get:
+      summary: Get current metrics
+      description: Retrieve current metrics for the application
+      parameters:
+        - name: metric
+          in: query
+          description: Specific metric name to retrieve
+          required: false
+          schema:
+            type: string
+        - name: service
+          in: query
+          description: Service name to filter metrics for
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+components:
+  schemas:
+    MonitoringConfiguration:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the configuration
+        name:
+          type: string
+          description: Name of the monitoring setup
+        prometheusEndpoint:
+          type: string
+          description: URL to Prometheus server
+        grafanaEndpoint:
+          type: string
+          description: URL to Grafana dashboard
+        alertmanagerEndpoint:
+          type: string
+          description: URL to Alertmanager
+        enabled:
+          type: boolean
+          description: Whether monitoring is enabled
+        createdAt:
+          type: string
+          format: date-time
+          description: When the configuration was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the configuration was last updated
+      required:
+        - id
+        - name
+        - prometheusEndpoint
+        - grafanaEndpoint
+        - enabled
+    LogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: When the log entry was created
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+          description: Severity level of the log
+        service:
+          type: string
+          description: Name of the service that generated the log
+        message:
+          type: string
+          description: Log message content
+        metadata:
+          type: object
+          description: Additional metadata associated with the log
+      required:
+        - timestamp
+        - level
+        - service
+        - message
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the alert
+        name:
+          type: string
+          description: Name of the alert rule that triggered
+        status:
+          type: string
+          enum: [firing, resolved]
+          description: Current status of the alert
+        severity:
+          type: string
+          description: Severity level of the alert
+        startsAt:
+          type: string
+          format: date-time
+          description: When the alert started firing
+        endsAt:
+          type: string
+          format: date-time
+          description: When the alert was resolved (if applicable)
+        description:
+          type: string
+          description: Description of the alert
+        labels:
+          type: object
+          description: Labels attached to the alert
+      required:
+        - id
+        - name
+        - status
+        - startsAt
+    AlertRule:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the alert rule
+        name:
+          type: string
+          description: Name of the alert rule
+        expr:
+          type: string
+          description: PromQL expression that triggers the alert
+        for:
+          type: string
+          description: Duration to wait before firing the alert
+        labels:
+          type: object
+          description: Labels to attach to the alert
+        annotations:
+          type: object
+          description: Annotations with longer descriptions
+        enabled:
+          type: boolean
+          description: Whether the alert rule is active
+      required:
+        - name
+        - expr
+        - for
+    MetricsResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: When the metrics were collected
+        metrics:
+          type: object
+          description: Key-value pairs of metric names and values

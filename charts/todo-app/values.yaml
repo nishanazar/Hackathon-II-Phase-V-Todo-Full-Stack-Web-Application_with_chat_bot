@@ -1,0 +1,44 @@
+frontend:
+  enabled: true
+  image:
+    repository: todo-frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  env:
+    - name: BACKEND_URL
+      value: "http://todo-backend:8000"
+
+backend:
+  enabled: true
+  image:
+    repository: todo-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  env:
+    - name: AI_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: ai-key-secret
+          key: AI_API_KEY
+    - name: DATABASE_URL
+      value: "postgresql://neondb_owner:npg_PI27GCiafTWl@ep-divine-hall-a4exapdh-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+    - name: BETTER_AUTH_SECRET
+      value: "Xp2Pai0rYqduM32JBoNYaqWYVQjZEIWk"

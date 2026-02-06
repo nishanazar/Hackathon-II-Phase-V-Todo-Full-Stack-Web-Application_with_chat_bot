@@ -1,0 +1,29 @@
+# Database Schema
+
+## Tables
+
+### conversations
+- id: SERIAL PRIMARY KEY
+- user_id: VARCHAR(255) NOT NULL, INDEX
+- created_at: TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+- updated_at: TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+- FOREIGN KEY (user_id) REFERENCES users(id)
+
+### messages
+- id: SERIAL PRIMARY KEY
+- user_id: VARCHAR(255) NOT NULL, INDEX
+- conversation_id: INTEGER NOT NULL, INDEX
+- role: VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant'))
+- content: TEXT NOT NULL
+- created_at: TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+- FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+- FOREIGN KEY (user_id) REFERENCES users(id)
+
+### tasks (existing)
+- id: UUID PRIMARY KEY
+- title: VARCHAR(200) NOT NULL
+- description: TEXT
+- completed: BOOLEAN DEFAULT FALSE
+- user_id: VARCHAR(255) NOT NULL, INDEX
+- created_at: TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+- updated_at: TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

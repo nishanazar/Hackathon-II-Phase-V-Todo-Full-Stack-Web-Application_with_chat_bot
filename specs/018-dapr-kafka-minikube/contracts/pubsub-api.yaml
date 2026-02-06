@@ -1,0 +1,138 @@
+openapi: 3.0.1
+info:
+  title: Dapr Pub/Sub API for Task Events
+  description: API specification for publishing and subscribing to task-related events via Dapr
+  version: 1.0.0
+servers:
+  - url: http://localhost:3500
+    description: Dapr Sidecar API
+paths:
+  /v1.0/publish/{pubsubname}/{topic}:
+    post:
+      summary: Publish a task event to a topic
+      description: Publishes a task-related event to the specified pub/sub component and topic
+      parameters:
+        - name: pubsubname
+          in: path
+          required: true
+          description: The name of the pub/sub component (e.g., kafka-pubsub)
+          schema:
+            type: string
+        - name: topic
+          in: path
+          required: true
+          description: The topic name (e.g., task-events)
+          schema:
+            type: string
+        - name: metadata
+          in: query
+          description: Additional metadata for the message
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskEvent'
+      responses:
+        '200':
+          description: Event published successfully
+        '400':
+          description: Invalid request
+        '500':
+          description: Failed to publish event
+  /v1.0/subscriptions/{name}:
+    get:
+      summary: Get subscription information
+      description: Retrieves information about a specific subscription
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The name of the subscription
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subscription information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '404':
+          description: Subscription not found
+        '500':
+          description: Failed to retrieve subscription
+components:
+  schemas:
+    TaskEvent:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - userId
+        - taskId
+        - timestamp
+        - payload
+      properties:
+        eventId:
+          type: string
+          description: Unique identifier for the event
+          example: "event-123"
+        eventType:
+          type: string
+          description: Type of the task event
+          enum: [task.created, task.updated, task.deleted, task.completed]
+          example: "task.created"
+        userId:
+          type: string
+          description: ID of the user associated with the event
+          example: "user-456"
+        taskId:
+          type: string
+          description: ID of the task involved in the event
+          example: "task-789"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when the event occurred
+          example: "2026-01-29T10:00:00Z"
+        payload:
+          type: object
+          description: Additional data related to the event
+          properties:
+            title:
+              type: string
+              description: Title of the task
+              example: "Sample Task"
+            description:
+              type: string
+              description: Description of the task
+              example: "This is a sample task"
+    Subscription:
+      type: object
+      required:
+        - pubsubname
+        - topic
+        - route
+      properties:
+        pubsubname:
+          type: string
+          description: Name of the pub/sub component
+          example: "kafka-pubsub"
+        topic:
+          type: string
+          description: Name of the topic to subscribe to
+          example: "task-events"
+        route:
+          type: string
+          description: Route to send messages to
+          example: "/webhook/task-event"
+        metadata:
+          type: object
+          description: Subscription-specific metadata
+          additionalProperties:
+            type: string

@@ -1,0 +1,419 @@
+openapi: 3.0.3
+info:
+  title: Todo AI Chatbot - Advanced Task API
+  description: API for managing tasks with advanced features like due dates, priorities, tags, and recurring intervals
+  version: 1.0.0
+servers:
+  - url: https://api.todo-chatbot.com/v1
+    description: Production server
+  - url: http://localhost:8000/v1
+    description: Development server
+paths:
+  /api/{user_id}/tasks:
+    get:
+      summary: Get all tasks for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: completed
+          in: query
+          description: Filter by completion status
+          schema:
+            type: boolean
+        - name: priority
+          in: query
+          description: Filter by priority level (1-5)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: due_after
+          in: query
+          description: Filter tasks due after this date (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+        - name: due_before
+          in: query
+          description: Filter tasks due before this date (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+        - name: tags
+          in: query
+          description: Filter by tags (comma-separated)
+          schema:
+            type: string
+        - name: sort_by
+          in: query
+          description: Field to sort by (due_date, priority, created_at, title)
+          schema:
+            type: string
+            enum: [due_date, priority, created_at, title]
+        - name: sort_order
+          in: query
+          description: Sort order (asc or desc)
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  total:
+                    type: integer
+                    description: Total number of tasks matching the query
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - user does not have access to this resource
+    post:
+      summary: Create a new task
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+  /api/{user_id}/tasks/{task_id}:
+    get:
+      summary: Get a specific task
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Task not found
+    put:
+      summary: Update a task
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Task not found
+    delete:
+      summary: Delete a task
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Task deleted successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Task not found
+  /api/{user_id}/tasks/{task_id}/complete:
+    patch:
+      summary: Mark a task as completed
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task marked as completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Task not found
+  /api/{user_id}/tasks/search:
+    get:
+      summary: Search tasks
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: The ID of the user
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  total:
+                    type: integer
+                    description: Total number of tasks matching the search
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+components:
+  schemas:
+    Task:
+      type: object
+      required:
+        - id
+        - title
+        - completed
+        - created_at
+        - updated_at
+        - user_id
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the task
+        title:
+          type: string
+          description: Task title
+          maxLength: 255
+        description:
+          type: string
+          description: Detailed description of the task
+          maxLength: 1000
+        completed:
+          type: boolean
+          description: Whether the task is completed
+        created_at:
+          type: string
+          format: date-time
+          description: When the task was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the task was last updated
+        due_date:
+          type: string
+          format: date-time
+          description: Deadline for the task completion
+        priority:
+          type: integer
+          description: Priority level (1-5, where 5 is highest)
+          minimum: 1
+          maximum: 5
+          default: 3
+        tags:
+          type: array
+          description: Array of tags associated with the task
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        recurring_interval:
+          type: string
+          description: Interval for recurring tasks
+          enum: [daily, weekly, monthly, yearly]
+        user_id:
+          type: string
+          description: ID of the user who owns the task
+    CreateTaskRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: Task title
+          maxLength: 255
+        description:
+          type: string
+          description: Detailed description of the task
+          maxLength: 1000
+        due_date:
+          type: string
+          format: date-time
+          description: Deadline for the task completion
+        priority:
+          type: integer
+          description: Priority level (1-5, where 5 is highest)
+          minimum: 1
+          maximum: 5
+          default: 3
+        tags:
+          type: array
+          description: Array of tags associated with the task
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        recurring_interval:
+          type: string
+          description: Interval for recurring tasks
+          enum: [daily, weekly, monthly, yearly]
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Task title
+          maxLength: 255
+        description:
+          type: string
+          description: Detailed description of the task
+          maxLength: 1000
+        due_date:
+          type: string
+          format: date-time
+          description: Deadline for the task completion
+        priority:
+          type: integer
+          description: Priority level (1-5, where 5 is highest)
+          minimum: 1
+          maximum: 5
+        tags:
+          type: array
+          description: Array of tags associated with the task
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        recurring_interval:
+          type: string
+          description: Interval for recurring tasks
+          enum: [daily, weekly, monthly, yearly]
+        completed:
+          type: boolean
+          description: Whether the task is completed

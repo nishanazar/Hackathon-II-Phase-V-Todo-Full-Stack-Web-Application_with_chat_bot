@@ -1,0 +1,53 @@
+# API Contract: Todo Backend Service
+
+## Overview
+This document describes the API contract for the Todo backend service that will be deployed as part of the Helm chart.
+
+## Base Path
+The backend service will be accessible at the URL determined by the Kubernetes service configuration.
+
+## Endpoints
+
+### Health Check
+- **GET** `/health`
+- **Description**: Check the health status of the backend service
+- **Response**: 200 OK with health status information
+
+### User Authentication
+- **POST** `/api/auth/login`
+- **Description**: Authenticate user and return JWT token
+- **Request Body**: JSON with username/email and password
+- **Response**: 200 OK with JWT token
+
+- **POST** `/api/auth/register`
+- **Description**: Register a new user
+- **Request Body**: JSON with user details
+- **Response**: 201 Created with user information
+
+### Task Management
+- **GET** `/api/{user_id}/tasks`
+- **Description**: Retrieve all tasks for a specific user
+- **Headers**: Authorization: Bearer {jwt_token}
+- **Response**: 200 OK with list of tasks
+
+- **POST** `/api/{user_id}/tasks`
+- **Description**: Create a new task for a specific user
+- **Headers**: Authorization: Bearer {jwt_token}
+- **Request Body**: JSON with task details
+- **Response**: 201 Created with new task information
+
+- **GET** `/api/{user_id}/tasks/{task_id}`
+- **Description**: Retrieve a specific task for a user
+- **Headers**: Authorization: Bearer {jwt_token}
+- **Response**: 200 OK with task details
+
+- **PUT** `/api/{user_id}/tasks/{task_id}`
+- **Description**: Update a specific task for a user
+- **Headers**: Authorization: Bearer {jwt_token}
+- **Request Body**: JSON with updated task details
+- **Response**: 200 OK with updated task information
+
+- **DELETE** `/api/{user_id}/tasks/{task_id}`
+- **Description**: Delete a specific task for a user
+- **Headers**: Authorization: Bearer {jwt_token}
+- **Response**: 204 No Content
