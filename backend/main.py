@@ -14,6 +14,9 @@ except Exception as e:
     logging.warning(f"Could not import mcp_server: {e}")
     mcp_server = None
 
+# Import reminder service
+from services.reminder_service import reminder_service
+
 app = FastAPI(title="Todo API", version="1.0.0")
 
 
@@ -44,7 +47,6 @@ async def internal_error_handler(request: Request, exc):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://hackathon-ii-phase-iii-todo-full-stack-web-applicati-377xbdnbb.vercel.app",  # Production frontend
         "https://nishanazar-new-repo.hf.space",  # Hugging Face Space for backend
         "http://localhost:3000",  # Local development frontend
         "http://localhost:3001",  # Alternative local development frontend
@@ -53,19 +55,42 @@ app.add_middleware(
         "http://127.0.0.1:3003",  # Alternative localhost for frontend
         "http://localhost:8000",  # Allow requests from same origin (for development)
         "http://127.0.0.1:8000",  # Allow requests from same origin (for development)
+        "http://localhost:3004",  # Additional local development frontend port
+        "http://127.0.0.1:3004",  # Additional localhost for frontend port
+        "http://localhost:3005",  # Additional local development frontend port
+        "http://127.0.0.1:3005",  # Additional localhost for frontend port
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly allow these methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly allow these methods
+    allow_headers=["*"],  # Allow all headers including custom headers
     # Allow preflight requests to bypass auth
-    allow_origin_regex=r"https?://localhost(:[0-9]+)?|https?://127\.0\.0\.1(:[0-9]+)?",
+    allow_origin_regex=r"https?://localhost(:[0-9]+)?|https?://127\.0\.0\.1(:[0-9]+)?|https?://\[::1\](:[0-9]+)?",
 )
 
 # Create the database tables
 @app.on_event("startup")
 def on_startup():
     from sqlmodel import SQLModel
-    SQLModel.metadata.create_all(engine)
+    import logging
+    try:
+        SQLModel.metadata.create_all(engine)
+        logging.info("Database tables created/verified successfully")
+    except Exception as e:
+        logging.error(f"Error creating database tables: {e}")
+        raise
+
+    # Start the reminder scheduler
+    reminder_service.start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    import asyncio
+    from services.dapr_client import dapr_client
+    # Close the Dapr client
+    asyncio.create_task(dapr_client.close())
+    # Stop the reminder scheduler
+    reminder_service.stop_scheduler()
 
 # Include the task routes
 app.include_router(tasks.router, prefix="/api/{user_id}", tags=["tasks"])

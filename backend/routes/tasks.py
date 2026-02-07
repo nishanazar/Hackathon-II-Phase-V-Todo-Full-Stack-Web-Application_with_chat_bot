@@ -1,18 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-import asyncio
+from typing import List, Optional
+from datetime import datetime
 
 # Import fix for Hugging Face deployment - ensuring correct module path
-from models import Task, TaskCreate, TaskUpdate, TaskResponse  # This is the correct import
+from models import Task, TaskCreate, TaskUpdate, TaskResponse, PriorityEnum, RecurringIntervalEnum  # This is the correct import
+from services.task_service import (
+    create_task as service_create_task,
+    get_tasks as service_get_tasks,
+    get_task as service_get_task,
+    update_task as service_update_task,
+    delete_task as service_delete_task,
+    complete_task_and_create_next_occurrence as service_complete_task_with_recurring
+)
+from services.search_service import search_tasks as service_search_tasks
 
 from sqlmodel import Session, select
 from auth import get_current_user, verify_user_id_match
 from db import get_db
 from exceptions import TaskNotFoundException, UserMismatchException, ValidationErrorException
 from uuid import UUID
-
-# Import Dapr pub/sub service
-from services.dapr_pubsub_service import publish_task_event
 
 router = APIRouter(
     prefix="/tasks",
@@ -21,7 +27,7 @@ router = APIRouter(
 )
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_task(
+def create_task(
     *,
     db: Session = Depends(get_db),
     current_user_id: str = Depends(get_current_user),
@@ -42,31 +48,8 @@ async def create_task(
     if task.description and len(task.description) > 1000:
         raise ValidationErrorException("Description must be less than 1000 characters")
 
-    # Create the task with the user_id
-    db_task = Task(
-        title=task.title,
-        description=task.description,
-        completed=task.completed,
-        user_id=user_id
-    )
-
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-
-    # Publish task created event via Dapr
-    task_dict = {
-        "id": str(db_task.id),
-        "title": db_task.title,
-        "description": db_task.description,
-        "completed": db_task.completed,
-        "user_id": db_task.user_id,
-        "created_at": db_task.created_at.isoformat() if db_task.created_at else None,
-        "updated_at": db_task.updated_at.isoformat() if db_task.updated_at else None
-    }
-
-    # Publish the event asynchronously
-    asyncio.create_task(publish_task_event("task.created", task_dict, user_id))
+    # Use the service to create the task
+    db_task = service_create_task(db, task, user_id)
 
     return db_task
 
@@ -76,25 +59,33 @@ def read_tasks(
     db: Session = Depends(get_db),
     current_user_id: str = Depends(get_current_user),
     user_id: str,
-    status_filter: str = "all"  # all, pending, completed
+    status_filter: str = "all",  # all, pending, completed
+    priority_filter: Optional[str] = None,  # low, medium, high
+    due_date_from: Optional[datetime] = None,
+    due_date_to: Optional[datetime] = None,
+    tags_filter: Optional[str] = None,  # comma-separated tags
+    sort_by: str = "created_at",  # created_at, due_date, priority
+    sort_order: str = "asc"  # asc, desc
 ):
     """
-    Retrieve tasks for the authenticated user with optional filtering.
+    Retrieve tasks for the authenticated user with optional filtering and sorting.
     """
     # Verify that the user_id in the JWT matches the user_id in the path
     verify_user_id_match(current_user_id, user_id)
 
-    # Build the query with user_id filter
-    query = select(Task).where(Task.user_id == user_id)
-
-    # Add status filter if specified
-    if status_filter == "pending":
-        query = query.where(Task.completed == False)
-    elif status_filter == "completed":
-        query = query.where(Task.completed == True)
-    # If status_filter is "all", no additional filter is needed
-
-    tasks = db.exec(query).all()
+    # Use the service to get tasks with filtering and sorting
+    tasks = service_get_tasks(
+        db, 
+        user_id, 
+        status_filter, 
+        priority_filter, 
+        due_date_from, 
+        due_date_to, 
+        tags_filter, 
+        sort_by, 
+        sort_order
+    )
+    
     return tasks
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -117,19 +108,16 @@ def read_task(
     except ValueError:
         raise TaskNotFoundException(task_id)
 
-    task = db.get(Task, uuid_task_id)
+    # Use the service to get the task
+    task = service_get_task(db, uuid_task_id, user_id)
 
     if not task:
-        raise TaskNotFoundException(task_id)
-
-    # Ensure the task belongs to the authenticated user
-    if task.user_id != user_id:
         raise TaskNotFoundException(task_id)
 
     return task
 
 @router.put("/{task_id}", response_model=TaskResponse)
-async def update_task(
+def update_task(
     *,
     db: Session = Depends(get_db),
     current_user_id: str = Depends(get_current_user),
@@ -149,50 +137,13 @@ async def update_task(
     except ValueError:
         raise TaskNotFoundException(task_id)
 
-    db_task = db.get(Task, uuid_task_id)
+    # Use the service to update the task
+    updated_task = service_update_task(db, uuid_task_id, task, user_id)
 
-    if not db_task:
+    if not updated_task:
         raise TaskNotFoundException(task_id)
 
-    # Ensure the task belongs to the authenticated user
-    if db_task.user_id != user_id:
-        raise TaskNotFoundException(task_id)
-
-    # Validate title length if provided
-    if task.title is not None and (len(task.title) < 1 or len(task.title) > 200):
-        raise ValidationErrorException("Title must be between 1 and 200 characters")
-
-    # Validate description length if provided
-    if task.description is not None and len(task.description) > 1000:
-        raise ValidationErrorException("Description must be less than 1000 characters")
-
-    # Update the task fields
-    if task.title is not None:
-        db_task.title = task.title
-    if task.description is not None:
-        db_task.description = task.description
-    if task.completed is not None:
-        db_task.completed = task.completed
-
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-
-    # Publish task updated event via Dapr
-    task_dict = {
-        "id": str(db_task.id),
-        "title": db_task.title,
-        "description": db_task.description,
-        "completed": db_task.completed,
-        "user_id": db_task.user_id,
-        "created_at": db_task.created_at.isoformat() if db_task.created_at else None,
-        "updated_at": db_task.updated_at.isoformat() if db_task.updated_at else None
-    }
-
-    # Publish the event asynchronously
-    asyncio.create_task(publish_task_event("task.updated", task_dict, user_id))
-
-    return db_task
+    return updated_task
 
 @router.patch("/{task_id}", response_model=TaskResponse)
 def update_task_partial(
@@ -215,39 +166,16 @@ def update_task_partial(
     except ValueError:
         raise TaskNotFoundException(task_id)
 
-    db_task = db.get(Task, uuid_task_id)
+    # Use the service to update the task
+    updated_task = service_update_task(db, uuid_task_id, task, user_id)
 
-    if not db_task:
+    if not updated_task:
         raise TaskNotFoundException(task_id)
 
-    # Ensure the task belongs to the authenticated user
-    if db_task.user_id != user_id:
-        raise TaskNotFoundException(task_id)
-
-    # Validate title length if provided
-    if task.title is not None and (len(task.title) < 1 or len(task.title) > 200):
-        raise ValidationErrorException("Title must be between 1 and 200 characters")
-
-    # Validate description length if provided
-    if task.description is not None and len(task.description) > 1000:
-        raise ValidationErrorException("Description must be less than 1000 characters")
-
-    # Update only the fields that were provided
-    if task.title is not None:
-        db_task.title = task.title
-    if task.description is not None:
-        db_task.description = task.description
-    if task.completed is not None:
-        db_task.completed = task.completed
-
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-
-    return db_task
+    return updated_task
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(
+def delete_task(
     *,
     db: Session = Depends(get_db),
     current_user_id: str = Depends(get_current_user),
@@ -266,30 +194,77 @@ async def delete_task(
     except ValueError:
         raise TaskNotFoundException(task_id)
 
-    db_task = db.get(Task, uuid_task_id)
+    # Use the service to delete the task
+    success = service_delete_task(db, uuid_task_id, user_id)
 
-    if not db_task:
+    if not success:
         raise TaskNotFoundException(task_id)
-
-    # Ensure the task belongs to the authenticated user
-    if db_task.user_id != user_id:
-        raise TaskNotFoundException(task_id)
-
-    # Publish task deleted event via Dapr before deleting
-    task_dict = {
-        "id": str(db_task.id),
-        "title": db_task.title,
-        "description": db_task.description,
-        "completed": db_task.completed,
-        "user_id": db_task.user_id,
-        "created_at": db_task.created_at.isoformat() if db_task.created_at else None,
-        "updated_at": db_task.updated_at.isoformat() if db_task.updated_at else None
-    }
-
-    # Publish the event asynchronously
-    asyncio.create_task(publish_task_event("task.deleted", task_dict, user_id))
-
-    db.delete(db_task)
-    db.commit()
 
     return
+
+
+@router.post("/{task_id}/complete-with-recurring", response_model=TaskResponse)
+def complete_task_with_recurring_logic(
+    *,
+    db: Session = Depends(get_db),
+    current_user_id: str = Depends(get_current_user),
+    user_id: str,
+    task_id: str
+):
+    """
+    Mark a task as complete and if it's recurring, create the next occurrence.
+    """
+    # Verify that the user_id in the JWT matches the user_id in the path
+    verify_user_id_match(current_user_id, user_id)
+
+    # Convert task_id string to UUID
+    try:
+        uuid_task_id = UUID(task_id)
+    except ValueError:
+        raise TaskNotFoundException(task_id)
+
+    # Use the service to complete the task and create next occurrence if needed
+    new_task = service_complete_task_with_recurring(db, uuid_task_id, user_id)
+
+    if not new_task:
+        raise TaskNotFoundException(task_id)
+
+    return new_task
+
+
+@router.get("/search/", response_model=List[TaskResponse])
+def search_tasks(
+    *,
+    db: Session = Depends(get_db),
+    current_user_id: str = Depends(get_current_user),
+    user_id: str,
+    search_query: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    priority_filter: Optional[str] = None,
+    due_date_from: Optional[datetime] = None,
+    due_date_to: Optional[datetime] = None,
+    tags_filter: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "asc"
+):
+    """
+    Search tasks with multiple criteria including text search, filters, and sorting.
+    """
+    # Verify that the user_id in the JWT matches the user_id in the path
+    verify_user_id_match(current_user_id, user_id)
+
+    # Use the service to search tasks
+    tasks = service_search_tasks(
+        db,
+        user_id,
+        search_query,
+        status_filter,
+        priority_filter,
+        due_date_from,
+        due_date_to,
+        tags_filter,
+        sort_by,
+        sort_order
+    )
+    
+    return tasks

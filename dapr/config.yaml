@@ -1,17 +1,12 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: daprConfig
+  name: task-config
 spec:
   tracing:
     samplingRate: "1"
     zipkin:
-      endpointAddress: "http://zipkin.default.svc.cluster.local:9411/api/v2/spans"
-  metric:
-    enabled: true
-  httpPipeline:
-    handlers: []
-  secrets:
-    scopes:
-    - storeName: "kubernetes"
-      defaultAccess: "allow"
+      endpointAddress: "http://localhost:9411/api/v2/spans"
+  features:
+    - name: InputBindingErrorAsDeadLetter
+      enabled: true

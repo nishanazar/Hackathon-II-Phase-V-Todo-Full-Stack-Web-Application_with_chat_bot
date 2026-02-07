@@ -6,7 +6,7 @@ set -e  # Exit on any error
 echo "Starting deployment to Google Kubernetes Engine..."
 
 # Variables - Update these with your values
-PROJECT_ID=""  # Replace with your GCP project ID
+PROJECT_ID="gen-lang-client-0071684271"  # Replace with your GCP project ID
 GKE_CLUSTER="todo-app-cluster"
 GKE_ZONE="us-central1"
 IMAGE_NAME="todo-app"

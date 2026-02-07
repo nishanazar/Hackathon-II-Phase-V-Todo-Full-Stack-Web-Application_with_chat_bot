@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TaskCard } from '@/components/tasks/TaskCard';
-import { TaskForm } from '@/components/tasks/TaskForm';
+import { TaskCard } from '@/components/tasks/AdvancedTaskCard'; // Updated to use advanced card
+import { TaskForm } from '@/components/tasks/AdvancedTaskForm'; // Updated to use advanced form
 import { getCurrentSession, logout } from '@/lib/session-utils';
 import { Header } from '@/components/layout/Header';
 import { taskApi, Task, CreateTaskData, UpdateTaskData } from '@/lib/api';
@@ -13,6 +13,7 @@ const TasksPage = () => {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +27,8 @@ const TasksPage = () => {
         if (session && isMounted) {
           setUser({ id: session.user.id, email: session.user.email });
 
-          // Load tasks from the backend API
-          const tasksFromApi = await taskApi.getTasks();
+          // Load tasks from the backend API with filters
+          const tasksFromApi = await taskApi.getTasks(filter);
           if (isMounted) {
             setTasks(tasksFromApi);
           }
@@ -64,19 +65,14 @@ const TasksPage = () => {
       isMounted = false;
       window.removeEventListener('tasksModified', handleTasksModified);
     };
-  }, []); // Empty dependency array to run only once on mount
+  }, [filter]); // Added filter to dependency array
 
   // Handle adding a new task
-  const handleAddTask = async (taskData: { title: string; description: string }) => {
+  const handleAddTask = async (taskData: CreateTaskData) => {
     try {
       setError(null);
-      const newTaskData: CreateTaskData = {
-        title: taskData.title,
-        description: taskData.description,
-        completed: false
-      };
 
-      const newTask = await taskApi.createTask(newTaskData);
+      const newTask = await taskApi.createTask(taskData);
       setTasks(prevTasks => [newTask, ...prevTasks]);
       setEditingTask(null);
     } catch (error) {
@@ -86,17 +82,13 @@ const TasksPage = () => {
   };
 
   // Handle updating a task
-  const handleUpdateTask = async (taskData: { title: string; description: string }) => {
+  const handleUpdateTask = async (taskData: UpdateTaskData) => {
     if (!editingTask) return;
 
     try {
       setError(null);
-      const updateData: UpdateTaskData = {
-        title: taskData.title,
-        description: taskData.description
-      };
 
-      const updatedTask = await taskApi.updateTask(editingTask.id, updateData);
+      const updatedTask = await taskApi.updateTask(editingTask.id, taskData);
       setTasks(prevTasks =>
         prevTasks.map(task =>
           task.id === editingTask.id ? updatedTask : task
@@ -183,19 +175,25 @@ const TasksPage = () => {
     }
   };
 
-  // Filter and search tasks based on selected filter and search query
+  // Filter and search tasks based on selected filters and search query
   const filteredTasks = tasks.filter(task => {
-    // Apply filter
-    let passesFilter = true;
-    if (filter === 'active') passesFilter = !task.completed;
-    if (filter === 'completed') passesFilter = task.completed;
+    // Apply status filter
+    let passesStatusFilter = true;
+    if (filter === 'active') passesStatusFilter = !task.completed;
+    if (filter === 'completed') passesStatusFilter = task.completed;
+
+    // Apply priority filter
+    let passesPriorityFilter = true;
+    if (priorityFilter !== 'all' && task.priority) {
+      passesPriorityFilter = task.priority === priorityFilter;
+    }
 
     // Apply search
     const matchesSearch =
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return passesFilter && matchesSearch;
+    return passesStatusFilter && passesPriorityFilter && matchesSearch;
   });
 
   if (loading) {
@@ -229,37 +227,82 @@ const TasksPage = () => {
               </p>
             </div>
 
-            <div className="mt-4 md:mt-0 flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === 'all'
-                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
-                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilter('active')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === 'active'
-                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
-                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => setFilter('completed')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === 'completed'
-                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
-                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                Completed
-              </button>
+            <div className="mt-4 md:mt-0 flex flex-wrap gap-2">
+              <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filter === 'all'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setFilter('active')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filter === 'active'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setFilter('completed')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filter === 'completed'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Completed
+                </button>
+              </div>
+
+              <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+                <button
+                  onClick={() => setPriorityFilter('all')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priorityFilter === 'all'
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Priority
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('high')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priorityFilter === 'high'
+                      ? 'bg-red-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  High
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('medium')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priorityFilter === 'medium'
+                      ? 'bg-yellow-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Med
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('low')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priorityFilter === 'low'
+                      ? 'bg-green-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Low
+                </button>
+              </div>
             </div>
           </div>
 
@@ -289,9 +332,10 @@ const TasksPage = () => {
 
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-            {filter === 'all' && 'All Tasks'}
-            {filter === 'active' && 'Active Tasks'}
-            {filter === 'completed' && 'Completed Tasks'}
+            {filter === 'all' && priorityFilter === 'all' && 'All Tasks'}
+            {filter !== 'all' && priorityFilter === 'all' && `${filter.charAt(0).toUpperCase() + filter.slice(1)} Tasks`}
+            {filter === 'all' && priorityFilter !== 'all' && `${priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)} Priority Tasks`}
+            {filter !== 'all' && priorityFilter !== 'all' && `${filter.charAt(0).toUpperCase() + filter.slice(1)} ${priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)} Priority Tasks`}
           </h2>
 
           {filteredTasks.length === 0 ? (

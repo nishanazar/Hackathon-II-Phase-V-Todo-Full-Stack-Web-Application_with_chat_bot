@@ -10,6 +10,11 @@ export interface Task {
   createdAt: string;       // camelCase version (normalized)
   updatedAt: string;       // camelCase version (normalized)
   user_id: string;
+  // Advanced features
+  dueDate?: string;        // camelCase version of due_date
+  priority?: 'low' | 'medium' | 'high';  // camelCase version of priority
+  tags?: string[];         // camelCase version of tags
+  recurringInterval?: 'daily' | 'weekly' | 'monthly' | 'yearly'; // camelCase version of recurring_interval
 }
 
 // Define types for task operations
@@ -17,12 +22,22 @@ export interface CreateTaskData {
   title: string;
   description?: string;
   completed?: boolean;
+  // Advanced features
+  dueDate?: string;        // camelCase version of due_date
+  priority?: 'low' | 'medium' | 'high';  // camelCase version of priority
+  tags?: string[];         // camelCase version of tags
+  recurringInterval?: 'daily' | 'weekly' | 'monthly' | 'yearly'; // camelCase version of recurring_interval
 }
 
 export interface UpdateTaskData {
   title?: string;
   description?: string;
   completed?: boolean;
+  // Advanced features
+  dueDate?: string;
+  priority?: 'low' | 'medium' | 'high';
+  tags?: string[];
+  recurringInterval?: 'daily' | 'weekly' | 'monthly' | 'yearly';
 }
 
 // API base URL - in production, this would be the backend server URL
@@ -48,22 +63,36 @@ async function makeAuthenticatedRequest(
 ): Promise<any> {
   try {
     console.log('Making API request to:', url); // Debug logging
+    console.log('Request options:', options); // Debug logging
 
     // For Hugging Face deployment, we might not need authentication
     // But we'll keep it in case the backend requires it
     const session = await getCurrentSession();
+    console.log('Current session:', session); // Debug logging
 
-    const response = await fetch(url, {
+    // Prepare headers
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    // Only add authorization header if we have a session
+    if (session && session.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
+    const requestOptions: RequestInit = {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        // Only add authorization header if we have a session
-        ...(session && { 'Authorization': `Bearer ${session.token}` }),
-        ...options.headers,
-      },
+      headers,
       // Add mode: 'cors' to handle cross-origin requests properly
       mode: 'cors',
-    });
+      // Add cache control to avoid cached responses
+      cache: 'no-cache',
+      // Add credentials to include cookies in cross-origin requests if needed
+      credentials: 'include',
+    };
+
+    const response = await fetch(url, requestOptions);
 
     console.log('Response status:', response.status); // Debug logging
     // Convert headers to an array in a way that's compatible with older ES targets
@@ -75,7 +104,12 @@ async function makeAuthenticatedRequest(
 
     // Handle different response status codes
     if (!response.ok) {
-      if (response.status === 401) {
+      // For 422 errors specifically, we need to get the validation error details
+      if (response.status === 422) {
+        const errorData = await response.json();
+        console.error('Validation error details:', errorData);
+        throw new Error(`Validation error: ${JSON.stringify(errorData)}`);
+      } else if (response.status === 401) {
         // Unauthorized - token might be expired
         localStorage.removeItem('auth-token');
 
@@ -137,6 +171,11 @@ async function makeAuthenticatedRequest(
             ...task,
             createdAt: task.created_at,
             updatedAt: task.updated_at,
+            // Also convert advanced features from snake_case to camelCase
+            dueDate: task.due_date,
+            priority: task.priority,
+            tags: task.tags,
+            recurringInterval: task.recurring_interval,
           };
         }
 
@@ -180,8 +219,9 @@ async function makeAuthenticatedRequest(
   } catch (error) {
     console.error('API request error:', error);
     // Check if this is a CORS or network error
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error('Network error or CORS issue. Please check that the backend is accessible and properly configured for cross-origin requests.');
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('CORS') || error.message.includes('network'))) {
+      console.error('CORS or network error detected');
+      throw new Error('Network error or CORS issue. Please check that the backend is accessible and properly configured for cross-origin requests. Make sure the backend server is running on http://localhost:8000 and that CORS is properly configured.');
     }
     throw error;
   }
@@ -190,10 +230,31 @@ async function makeAuthenticatedRequest(
 // Task API functions
 export const taskApi = {
   // Get all tasks for the current user
-  getTasks: async (statusFilter: 'all' | 'pending' | 'completed' = 'all'): Promise<Task[]> => {
+  getTasks: async (
+    statusFilter: 'all' | 'pending' | 'completed' = 'all',
+    priorityFilter?: 'low' | 'medium' | 'high',
+    dueDateFrom?: string,
+    dueDateTo?: string,
+    tagsFilter?: string,
+    sortBy: 'created_at' | 'due_date' | 'priority' = 'created_at',
+    sortOrder: 'asc' | 'desc' = 'asc'
+  ): Promise<Task[]> => {
     // Get the current user ID to construct the proper API endpoint
     const userId = await getCurrentUserId();
-    const url = `${API_BASE_URL}/api/${userId}/tasks/`;
+    
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('status_filter', statusFilter);
+    
+    if (priorityFilter) params.append('priority_filter', priorityFilter);
+    if (dueDateFrom) params.append('due_date_from', dueDateFrom);
+    if (dueDateTo) params.append('due_date_to', dueDateTo);
+    if (tagsFilter) params.append('tags_filter', tagsFilter);
+    params.append('sort_by', sortBy);
+    params.append('sort_order', sortOrder);
+    
+    const queryString = params.toString();
+    const url = `${API_BASE_URL}/api/${userId}/tasks/${queryString ? '?' + queryString : ''}`;
 
     return makeAuthenticatedRequest(url, {
       method: 'GET',
@@ -206,12 +267,30 @@ export const taskApi = {
     const userId = await getCurrentUserId();
     const url = `${API_BASE_URL}/api/${userId}/tasks/`;
 
+    // Validate required fields before sending
+    if (!taskData.title || taskData.title.trim().length === 0) {
+      throw new Error('Title is required and cannot be empty');
+    }
+
+    if (taskData.title.length > 200) {
+      throw new Error('Title must be 200 characters or less');
+    }
+
+    if (taskData.description && taskData.description.length > 1000) {
+      throw new Error('Description must be 1000 characters or less');
+    }
+
     return makeAuthenticatedRequest(url, {
       method: 'POST',
       body: JSON.stringify({
-        title: taskData.title,
-        description: taskData.description || "",
-        completed: taskData.completed || false
+        title: taskData.title.trim(),
+        description: taskData.description ? taskData.description.trim() : "",
+        completed: taskData.completed || false,
+        // Advanced features
+        due_date: taskData.dueDate,
+        priority: taskData.priority || 'medium', // Default to medium priority
+        tags: taskData.tags || [],
+        recurring_interval: taskData.recurringInterval
       }),
     });
   },
@@ -238,7 +317,12 @@ export const taskApi = {
       body: JSON.stringify({
         title: taskData.title,
         description: taskData.description || "",
-        completed: taskData.completed || false
+        completed: taskData.completed || false,
+        // Advanced features
+        due_date: taskData.dueDate,
+        priority: taskData.priority,
+        tags: taskData.tags || [],
+        recurring_interval: taskData.recurringInterval
       }),
     });
   },
@@ -252,7 +336,11 @@ export const taskApi = {
     return makeAuthenticatedRequest(url, {
       method: 'PATCH',
       body: JSON.stringify({
-        completed: taskData.completed
+        completed: taskData.completed,
+        due_date: taskData.dueDate,
+        priority: taskData.priority,
+        tags: taskData.tags,
+        recurring_interval: taskData.recurringInterval
       }),
     });
   },
@@ -265,6 +353,40 @@ export const taskApi = {
 
     await makeAuthenticatedRequest(url, {
       method: 'DELETE',
+    });
+  },
+
+  // Search tasks with multiple criteria
+  searchTasks: async (
+    searchQuery?: string,
+    statusFilter?: 'all' | 'pending' | 'completed',
+    priorityFilter?: 'low' | 'medium' | 'high',
+    dueDateFrom?: string,
+    dueDateTo?: string,
+    tagsFilter?: string,
+    sortBy: 'created_at' | 'due_date' | 'priority' | 'title' = 'created_at',
+    sortOrder: 'asc' | 'desc' = 'asc'
+  ): Promise<Task[]> => {
+    // Get the current user ID to construct the proper API endpoint
+    const userId = await getCurrentUserId();
+    
+    // Build query parameters
+    const params = new URLSearchParams();
+    
+    if (searchQuery) params.append('search_query', searchQuery);
+    if (statusFilter) params.append('status_filter', statusFilter);
+    if (priorityFilter) params.append('priority_filter', priorityFilter);
+    if (dueDateFrom) params.append('due_date_from', dueDateFrom);
+    if (dueDateTo) params.append('due_date_to', dueDateTo);
+    if (tagsFilter) params.append('tags_filter', tagsFilter);
+    params.append('sort_by', sortBy);
+    params.append('sort_order', sortOrder);
+    
+    const queryString = params.toString();
+    const url = `${API_BASE_URL}/api/${userId}/tasks/search/${queryString ? '?' + queryString : ''}`;
+
+    return makeAuthenticatedRequest(url, {
+      method: 'GET',
     });
   },
 };

@@ -1,30 +1,66 @@
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import Field as PydanticField
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
 from pydantic import field_serializer
+from enum import Enum
+import json
+from sqlalchemy import JSON
 
-# Task model (existing Phase II model - unchanged)
+# Define enums for priority and recurrence
+class PriorityEnum(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+class RecurringIntervalEnum(str, Enum):
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+    yearly = "yearly"
+
+# Custom field for tags that stores as JSON
+def tags_field():
+    from sqlalchemy import JSON
+    return Field(sa_column_kwargs={"type_": JSON})
+
+# Task model (extended with advanced features)
 class TaskBase(SQLModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     completed: bool = Field(default=False)
+    # Advanced features
+    due_date: Optional[datetime] = Field(default=None)
+    priority: Optional[PriorityEnum] = Field(default=PriorityEnum.medium)
+    tags: Optional[str] = Field(default='[]')  # Store as JSON string
+    recurring_interval: Optional[RecurringIntervalEnum] = Field(default=None)
 
 class Task(TaskBase, table=True):
     """
     Task model representing a task entity with user ownership and CRUD operations.
+    Extended with advanced features: due_date, priority, tags, recurring_interval
     """
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: str = Field(index=True)  # Removed foreign_key constraint for simplicity
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    # Override the tags field to specify it as JSON type in the database
+    tags: str = Field(default='[]', sa_column=JSON)
 
-class TaskCreate(TaskBase):
+class TaskCreate(SQLModel):
     """
     Request model for creating new tasks.
     """
-    pass
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    completed: bool = Field(default=False)
+    # Advanced features
+    due_date: Optional[datetime] = Field(default=None)
+    priority: Optional[PriorityEnum] = Field(default=PriorityEnum.medium)
+    tags: Optional[List[str]] = []  # Accept as list in API but store as JSON string
+    recurring_interval: Optional[RecurringIntervalEnum] = Field(default=None)
 
 class TaskUpdate(SQLModel):
     """
@@ -33,13 +69,26 @@ class TaskUpdate(SQLModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     completed: Optional[bool] = Field(default=None)
+    # Advanced features
+    due_date: Optional[datetime] = Field(default=None)
+    priority: Optional[PriorityEnum] = Field(default=None)
+    tags: Optional[List[str]] = Field(default=None)  # Accept as list in API
+    recurring_interval: Optional[RecurringIntervalEnum] = Field(default=None)
 
-class TaskResponse(TaskBase):
+class TaskResponse(SQLModel):
     """
     Response model for task operations.
     """
     id: UUID
     user_id: str
+    title: str
+    description: Optional[str] = None
+    completed: bool = False
+    # Advanced features
+    due_date: Optional[datetime] = None
+    priority: Optional[PriorityEnum] = PriorityEnum.medium
+    tags: List[str]  # Tags as list in response
+    recurring_interval: Optional[RecurringIntervalEnum] = None
     created_at: datetime
     updated_at: datetime
 
@@ -52,6 +101,23 @@ class TaskResponse(TaskBase):
     def serialize_updated_at(self, value: datetime) -> str:
         """Serialize updated_at datetime to ISO format string."""
         return value.isoformat()
+
+    @field_serializer('due_date')
+    def serialize_due_date(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize due_date datetime to ISO format string."""
+        if value is not None:
+            return value.isoformat()
+        return None
+
+    @field_serializer('tags')
+    def serialize_tags(self, value: str) -> List[str]:
+        """Deserialize tags from JSON string to list."""
+        if isinstance(value, list):
+            return value
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return []
 
 
 # Conversation model (new for Phase III)

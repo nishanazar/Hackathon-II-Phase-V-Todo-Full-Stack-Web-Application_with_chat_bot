@@ -1,85 +1,59 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
+import jwt
+from jwt import PyJWTError
+from pydantic import BaseModel
 from typing import Optional
-import os
-from functools import wraps
-
-# Using the same authentication approach as the existing system
+from settings import settings
 security = HTTPBearer()
 
-# Get secret key from environment - fallback to default for development
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """
-    Create a new access token with the provided data
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def verify_token(token: str):
-    """
-    Verify the provided token and return the payload
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return user_id
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
+class TokenData(BaseModel):
+    user_id: str
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
-    Get the current user from the token in the Authorization header
-    Returns the user_id from the token
+    Dependency to extract and verify the current user from JWT token.
+    Returns the user_id if valid, raises HTTP 401 if invalid.
+    Updated to work with Better Auth tokens which may have different field names.
     """
-    token = credentials.credentials
-    user_id = verify_token(token)
-    return user_id
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
-
-def verify_user_id_match(current_user_id: str, path_user_id: str):
-    """
-    Verify that the user_id in the JWT matches the user_id in the path
-    Raises HTTPException if they don't match
-    """
-    if current_user_id != path_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User ID in token does not match user ID in request"
+    try:
+        # Decode the token using the BETTER_AUTH_SECRET
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.better_auth_secret,
+            algorithms=["HS256"]
         )
 
+        print(f"Decoded JWT payload: {payload}")  # Debug logging
 
-def require_same_user_or_admin(current_user_id: str, resource_user_id: str):
+        # Better Auth may use different field names for user ID
+        # Try multiple possible field names
+        user_id: str = payload.get("user_id") or payload.get("sub") or payload.get("id") or payload.get("userId")
+
+        if user_id is None:
+            print("No user_id found in token payload")  # Debug logging
+            raise credentials_exception
+
+        token_data = TokenData(user_id=user_id)
+    except PyJWTError as e:
+        print(f"JWT decode error: {str(e)}")  # Debug logging
+        raise credentials_exception
+
+    return token_data.user_id
+
+def verify_user_id_match(token_user_id: str, path_user_id: str) -> None:
     """
-    Verify that the current user is the same as the resource owner or is an admin
+    Verify that the user_id in the JWT token matches the user_id in the path parameter.
+    Raises HTTP 403 if they don't match.
     """
-    # For now, just check if the user IDs match
-    # In the future, we could add admin role checking
-    if current_user_id != resource_user_id:
+    if token_user_id != path_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this resource"
+            detail="User ID in token does not match user ID in path"
         )
